@@ -232,7 +232,12 @@ func (g *graph) emitDocument(index *Index, doc *Document) {
 		g.emitEdge("next", reader.Edge{OutV: rangeID, InV: resultIDs.ResultSet})
 		isDefinition := occ.SymbolRoles&int32(SymbolRole_Definition) != 0
 		if isDefinition && resultIDs.DefinitionResult > 0 {
-			g.emitEdge("item", reader.Edge{OutV: resultIDs.DefinitionResult, InVs: []int{rangeID}, Document: documentID})
+			g.emitEdgeWithProperty("item", EdgeWP{
+				OutV:     resultIDs.DefinitionResult,
+				InVs:     []int{rangeID},
+				Document: documentID,
+				Property: "definitions",
+			})
 			symbolInfo, ok := documentSymbolTable[occ.Symbol]
 			if ok {
 				g.emitRelationships(rangeID, documentID, resultIDs, localSymbolInformationTable, symbolInfo)
@@ -244,14 +249,23 @@ func (g *graph) emitDocument(index *Index, doc *Document) {
 				for _, rel := range relationships {
 					if rel.IsDefinition {
 						if ids, ok := g.symbolToResultSet[rel.Symbol]; ok && ids.DefinitionResult > 0 {
-							g.emitEdge("item", reader.Edge{OutV: ids.DefinitionResult, InVs: []int{rangeID}, Document: documentID})
+							g.emitEdgeWithProperty("item", EdgeWP{
+								OutV:     ids.DefinitionResult,
+								InVs:     []int{rangeID},
+								Document: documentID,
+							})
 						}
 					}
 				}
 			}
 		}
 		// reference
-		g.emitEdge("item", reader.Edge{OutV: resultIDs.ReferenceResult, InVs: []int{rangeID}, Document: documentID})
+		g.emitEdgeWithProperty("item", EdgeWP{
+			OutV:     resultIDs.ReferenceResult,
+			InVs:     []int{rangeID},
+			Document: documentID,
+			Property: "references",
+		})
 	}
 	if len(rangeIDs) != 0 { // a document may be empty
 		g.emitEdge("contains", reader.Edge{OutV: documentID, InVs: rangeIDs})
@@ -377,6 +391,21 @@ func (g *graph) emitEdge(label string, payload reader.Edge) {
 	g.emit("edge", label, payload)
 }
 
+type EdgeWP struct {
+	OutV     int
+	InV      int
+	InVs     []int
+	Document int
+	Property string
+}
+
+func (g *graph) emitEdgeWithProperty(label string, payload EdgeWP) {
+	if payload.InV == 0 && len(payload.InVs) == 0 {
+		panic("no inVs")
+	}
+	g.emit("edge", label, payload)
+}
+
 func (g *graph) emit(ty, label string, payload any) int {
 	g.ID++
 	g.Elements = append(g.Elements, reader.Element{
@@ -474,6 +503,7 @@ type jsonElement struct {
 	Identifier       string           `json:"identifier,omitempty"`
 	Kind             string           `json:"kind,omitempty"`
 	Scheme           string           `json:"scheme,omitempty"`
+	Property         string           `json:"property,omitempty"`
 }
 
 func ElementsToJsonElements(els []reader.Element) []jsonElement {
@@ -485,11 +515,20 @@ func ElementsToJsonElements(els []reader.Element) []jsonElement {
 			Label: el.Label,
 		}
 		if el.Type == "edge" {
-			edge := el.Payload.(reader.Edge)
-			object.OutV = edge.OutV
-			object.InV = edge.InV
-			object.InVs = edge.InVs
-			object.Document = edge.Document
+			if edge, ok := el.Payload.(reader.Edge); ok {
+				object.OutV = edge.OutV
+				object.InV = edge.InV
+				object.InVs = edge.InVs
+				object.Document = edge.Document
+			} else {
+				edge := el.Payload.(EdgeWP)
+				object.OutV = edge.OutV
+				object.InV = edge.InV
+				object.InVs = edge.InVs
+				object.Document = edge.Document
+				object.Property = edge.Property
+			}
+
 		} else if el.Type == "vertex" {
 			switch el.Label {
 			case "hoverResult":

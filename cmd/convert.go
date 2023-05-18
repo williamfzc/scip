@@ -5,12 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/urfave/cli/v2"
-
-	"github.com/sourcegraph/sourcegraph/lib/codeintel/lsif/protocol/reader"
-	"github.com/sourcegraph/sourcegraph/lib/errors"
-
 	"github.com/sourcegraph/scip/bindings/go/scip"
+	"github.com/sourcegraph/sourcegraph/lib/errors"
+	"github.com/urfave/cli/v2"
 )
 
 type convertFlags struct {
@@ -65,7 +62,7 @@ func convertMain(flags convertFlags) error {
 		return errors.Wrap(err, "failed to convert SCIP index to LSIF index")
 	}
 
-	err = reader.WriteNDJSON(reader.ElementsToJsonElements(lsifIndex), lsifWriter)
+	err = scip.WriteNDJSON(scip.ElementsToJsonElements(lsifIndex), lsifWriter)
 	if err != nil {
 		return errors.Wrapf(err, "failed to write LSIF index to path %s", toPath)
 	}
